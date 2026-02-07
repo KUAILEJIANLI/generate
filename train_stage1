@@ -1,0 +1,52 @@
+⚡ Detected 1 GPUs. Average VRAM per card: ~10GB (Estimated)
+Initializing Dataset (Size=256)...
+Scanning images in /home/tf/dataset/mini_imageNet...
+✅ Found 60000 training images.
+Initializing SALD Model...
+Loading VAE from runwayml/stable-diffusion-v1-5 (Frozen)...
+Loading U-Net from runwayml/stable-diffusion-v1-5...
+✅ Attention Slicing enabled (auto)!
+Start Training...
+Epoch 1:   0%|          | 0/15000 [00:00<?, ?it/s]Epoch 1:   0%|          | 0/15000 [00:16<?, ?it/s]
+╭─────────────────────────────── Traceback (most recent call last) ────────────────────────────────╮
+│ /home/tf/generate/train_stage1.py:143 in <module>                                                │
+│                                                                                                  │
+│   140 │   │   torch.save(save_dict, os.path.join(CONFIG['save_path'], "sald_stage1_latest.pth"   │
+│   141                                                                                            │
+│   142 if __name__ == "__main__":                                                                 │
+│ ❱ 143 │   train()                                                                                │
+│   144                                                                                            │
+│                                                                                                  │
+│ /home/tf/generate/train_stage1.py:123 in train                                                   │
+│                                                                                                  │
+│   120 │   │   │   │                                                                              │
+│   121 │   │   │   │   loss = loss / CONFIG['grad_accum_steps']                                   │
+│   122 │   │   │                                                                                  │
+│ ❱ 123 │   │   │   scaler.scale(loss).backward()                                                  │
+│   124 │   │   │                                                                                  │
+│   125 │   │   │   if (step + 1) % CONFIG['grad_accum_steps'] == 0:                               │
+│   126 │   │   │   │   scaler.step(optimizer)                                                     │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/_tensor.py:488 in backward      │
+│                                                                                                  │
+│    485 │   │   │   │   inputs=inputs,                                                            │
+│    486 │   │   │   )                                                                             │
+│    487 │   │   torch.autograd.backward(                                                          │
+│ ❱  488 │   │   │   self, gradient, retain_graph, create_graph, inputs=inputs                     │
+│    489 │   │   )                                                                                 │
+│    490 │                                                                                         │
+│    491 │   def register_hook(self, hook):                                                        │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/autograd/__init__.py:199 in     │
+│ backward                                                                                         │
+│                                                                                                  │
+│   196 │   # calls in the traceback and some print out the last line                              │
+│   197 │   Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the bac   │
+│   198 │   │   tensors, grad_tensors_, retain_graph, create_graph, inputs,                        │
+│ ❱ 199 │   │   allow_unreachable=True, accumulate_grad=True)  # Calls into the C++ engine to ru   │
+│   200                                                                                            │
+│   201 def grad(                                                                                  │
+│   202 │   outputs: _TensorOrTensors,                                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+OutOfMemoryError: CUDA out of memory. Tried to allocate 64.00 MiB (GPU 0; 23.57 GiB total capacity; 7.55 GiB already allocated; 56.12 MiB free; 7.74 GiB reserved in total by 
+PyTorch) If reserved memory is >> allocated memory try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF
