@@ -1,52 +1,269 @@
-⚡ Detected 1 GPUs. Average VRAM per card: ~10GB (Estimated)
-Initializing Dataset (Size=256)...
+Scanning images in /home/tf/dataset/mini_imageNet...
+🚀 Launching Distributed Training on 2 GPUs!
 Scanning images in /home/tf/dataset/mini_imageNet...
 ✅ Found 60000 training images.
-Initializing SALD Model...
-Loading VAE from runwayml/stable-diffusion-v1-5 (Frozen)...
-Loading U-Net from runwayml/stable-diffusion-v1-5...
-✅ Attention Slicing enabled (auto)!
+Loading VAE (FP16)...
+✅ Found 60000 training images.
+Loading VAE (FP16)...
+Loading U-Net (FP16)...
+Loading U-Net (FP16)...
+Injecting LoRA adapters...
+Injecting LoRA adapters...
 Start Training...
-Epoch 1:   0%|          | 0/15000 [00:00<?, ?it/s]Epoch 1:   0%|          | 0/15000 [00:16<?, ?it/s]
-╭─────────────────────────────── Traceback (most recent call last) ────────────────────────────────╮
-│ /home/tf/generate/train_stage1.py:143 in <module>                                                │
+Epoch 1:   0%|          | 0/30000 [00:00<?, ?it/s]Epoch 1:   0%|          | 0/30000 [00:08<?, ?it/s, loss=0.878]Epoch 1:   0%|          | 1/30000 [00:08<74:27:52,  8.94s/it, loss=0.878]╭─────────────────────────────── Traceback (most recent call last) ────────────────────────────────╮
+│ /home/tf/generate/train_stage1.py:121 in <module>                                                │
 │                                                                                                  │
-│   140 │   │   torch.save(save_dict, os.path.join(CONFIG['save_path'], "sald_stage1_latest.pth"   │
-│   141                                                                                            │
-│   142 if __name__ == "__main__":                                                                 │
-│ ❱ 143 │   train()                                                                                │
-│   144                                                                                            │
+│   118 │   │   │   print(f"✅ Saved checkpoint for Epoch {epoch+1}")                              │
+│   119                                                                                            │
+│   120 if __name__ == "__main__":                                                                 │
+│ ❱ 121 │   train()                                                                                │
+│   122                                                                                            │
 │                                                                                                  │
-│ /home/tf/generate/train_stage1.py:123 in train                                                   │
+│ /home/tf/generate/train_stage1.py:107 in train                                                   │
 │                                                                                                  │
-│   120 │   │   │   │                                                                              │
-│   121 │   │   │   │   loss = loss / CONFIG['grad_accum_steps']                                   │
-│   122 │   │   │                                                                                  │
-│ ❱ 123 │   │   │   scaler.scale(loss).backward()                                                  │
-│   124 │   │   │                                                                                  │
-│   125 │   │   │   if (step + 1) % CONFIG['grad_accum_steps'] == 0:                               │
-│   126 │   │   │   │   scaler.step(optimizer)                                                     │
+│   104 │   │                                                                                      │
+│   105 │   │   for step, (ir, vis, gt) in enumerate(loop):                                        │
+│   106 │   │   │   with accelerator.accumulate(model):                                            │
+│ ❱ 107 │   │   │   │   loss = model(ir, vis, gt)                                                  │
+│   108 │   │   │   │   accelerator.backward(loss)                                                 │
+│   109 │   │   │   │   optimizer.step()                                                           │
+│   110 │   │   │   │   optimizer.zero_grad()                                                      │
 │                                                                                                  │
-│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/_tensor.py:488 in backward      │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/nn/modules/module.py:1190 in    │
+│ _call_impl                                                                                       │
 │                                                                                                  │
-│    485 │   │   │   │   inputs=inputs,                                                            │
-│    486 │   │   │   )                                                                             │
-│    487 │   │   torch.autograd.backward(                                                          │
-│ ❱  488 │   │   │   self, gradient, retain_graph, create_graph, inputs=inputs                     │
-│    489 │   │   )                                                                                 │
-│    490 │                                                                                         │
-│    491 │   def register_hook(self, hook):                                                        │
+│   1187 │   │   # this function, and just call forward.                                           │
+│   1188 │   │   if not (self._backward_hooks or self._forward_hooks or self._forward_pre_hooks o  │
+│   1189 │   │   │   │   or _global_forward_hooks or _global_forward_pre_hooks):                   │
+│ ❱ 1190 │   │   │   return forward_call(*input, **kwargs)                                         │
+│   1191 │   │   # Do not call functions when jit is used                                          │
+│   1192 │   │   full_backward_hooks, non_full_backward_hooks = [], []                             │
+│   1193 │   │   if self._backward_hooks or _global_backward_hooks:                                │
 │                                                                                                  │
-│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/autograd/__init__.py:199 in     │
-│ backward                                                                                         │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/accelerate/utils/operations.py:553 in │
+│ forward                                                                                          │
 │                                                                                                  │
-│   196 │   # calls in the traceback and some print out the last line                              │
-│   197 │   Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the bac   │
-│   198 │   │   tensors, grad_tensors_, retain_graph, create_graph, inputs,                        │
-│ ❱ 199 │   │   allow_unreachable=True, accumulate_grad=True)  # Calls into the C++ engine to ru   │
-│   200                                                                                            │
-│   201 def grad(                                                                                  │
-│   202 │   outputs: _TensorOrTensors,                                                             │
+│   550 │   model_forward = ConvertOutputsToFp32(model_forward)                                    │
+│   551 │                                                                                          │
+│   552 │   def forward(*args, **kwargs):                                                          │
+│ ❱ 553 │   │   return model_forward(*args, **kwargs)                                              │
+│   554 │                                                                                          │
+│   555 │   # To act like a decorator so that it can be popped when doing `extract_model_from_pa   │
+│   556 │   forward.__wrapped__ = model_forward                                                    │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/accelerate/utils/operations.py:541 in │
+│ __call__                                                                                         │
+│                                                                                                  │
+│   538 │   │   update_wrapper(self, model_forward)                                                │
+│   539 │                                                                                          │
+│   540 │   def __call__(self, *args, **kwargs):                                                   │
+│ ❱ 541 │   │   return convert_to_fp32(self.model_forward(*args, **kwargs))                        │
+│   542 │                                                                                          │
+│   543 │   def __getstate__(self):                                                                │
+│   544 │   │   raise pickle.PicklingError(                                                        │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/amp/autocast_mode.py:14 in      │
+│ decorate_autocast                                                                                │
+│                                                                                                  │
+│    11 │   @functools.wraps(func)                                                                 │
+│    12 │   def decorate_autocast(*args, **kwargs):                                                │
+│    13 │   │   with autocast_instance:                                                            │
+│ ❱  14 │   │   │   return func(*args, **kwargs)                                                   │
+│    15 │   decorate_autocast.__script_unsupported = '@autocast() decorator is not supported in    │
+│    16 │   return decorate_autocast                                                               │
+│    17                                                                                            │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/nn/parallel/distributed.py:1026 │
+│ in forward                                                                                       │
+│                                                                                                  │
+│   1023 │   │   │   # call _rebuild_buckets before the peak memory usage increases                │
+│   1024 │   │   │   # during forward computation.                                                 │
+│   1025 │   │   │   # This should be called only once during whole training period.               │
+│ ❱ 1026 │   │   │   if torch.is_grad_enabled() and self.reducer._rebuild_buckets():               │
+│   1027 │   │   │   │   logger.info("Reducer buckets have been rebuilt in this iteration.")       │
+│   1028 │   │   │   │   self._has_rebuilt_buckets = True                                          │
+│   1029                                                                                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-OutOfMemoryError: CUDA out of memory. Tried to allocate 64.00 MiB (GPU 0; 23.57 GiB total capacity; 7.55 GiB already allocated; 56.12 MiB free; 7.74 GiB reserved in total by 
-PyTorch) If reserved memory is >> allocated memory try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF
+RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in 
+producing loss. You can enable unused parameter detection by passing the keyword argument `find_unused_parameters=True` to `torch.nn.parallel.DistributedDataParallel`, and by 
+making sure all `forward` function outputs participate in calculating loss. 
+If you already have done the above, then the distributed data parallel module wasn't able to locate the output tensors in the return value of your module's `forward` function. 
+Please include the loss function and the structure of the return value of `forward` of your module when reporting this issue (e.g. list, dict, iterable).
+Parameter indices which did not receive grad for rank 1: 271 272 273 274 275 276
+ In addition, you can set the environment variable TORCH_DISTRIBUTED_DEBUG to either INFO or DETAIL to print out information about which particular parameters did not receive 
+gradient on this rank as part of this error
+Epoch 1:   0%|          | 1/30000 [00:09<74:27:52,  8.94s/it, loss=0.0223]Epoch 1:   0%|          | 2/30000 [00:09<32:35:57,  3.91s/it, loss=0.0223]Epoch 1:   0%|          | 2/30000 [00:09<32:35:57,  3.91s/it, loss=0.0679]Epoch 1:   0%|          | 3/30000 [00:09<19:12:10,  2.30s/it, loss=0.0679]Epoch 1:   0%|          | 3/30000 [00:10<19:12:10,  2.30s/it, loss=0.093] Epoch 1:   0%|          | 4/30000 [00:10<13:09:22,  1.58s/it, loss=0.093]Epoch 1:   0%|          | 4/30000 [00:10<21:33:35,  2.59s/it, loss=0.093]
+╭─────────────────────────────── Traceback (most recent call last) ────────────────────────────────╮
+│ /home/tf/generate/train_stage1.py:121 in <module>                                                │
+│                                                                                                  │
+│   118 │   │   │   print(f"✅ Saved checkpoint for Epoch {epoch+1}")                              │
+│   119                                                                                            │
+│   120 if __name__ == "__main__":                                                                 │
+│ ❱ 121 │   train()                                                                                │
+│   122                                                                                            │
+│                                                                                                  │
+│ /home/tf/generate/train_stage1.py:107 in train                                                   │
+│                                                                                                  │
+│   104 │   │                                                                                      │
+│   105 │   │   for step, (ir, vis, gt) in enumerate(loop):                                        │
+│   106 │   │   │   with accelerator.accumulate(model):                                            │
+│ ❱ 107 │   │   │   │   loss = model(ir, vis, gt)                                                  │
+│   108 │   │   │   │   accelerator.backward(loss)                                                 │
+│   109 │   │   │   │   optimizer.step()                                                           │
+│   110 │   │   │   │   optimizer.zero_grad()                                                      │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/nn/modules/module.py:1190 in    │
+│ _call_impl                                                                                       │
+│                                                                                                  │
+│   1187 │   │   # this function, and just call forward.                                           │
+│   1188 │   │   if not (self._backward_hooks or self._forward_hooks or self._forward_pre_hooks o  │
+│   1189 │   │   │   │   or _global_forward_hooks or _global_forward_pre_hooks):                   │
+│ ❱ 1190 │   │   │   return forward_call(*input, **kwargs)                                         │
+│   1191 │   │   # Do not call functions when jit is used                                          │
+│   1192 │   │   full_backward_hooks, non_full_backward_hooks = [], []                             │
+│   1193 │   │   if self._backward_hooks or _global_backward_hooks:                                │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/accelerate/utils/operations.py:553 in │
+│ forward                                                                                          │
+│                                                                                                  │
+│   550 │   model_forward = ConvertOutputsToFp32(model_forward)                                    │
+│   551 │                                                                                          │
+│   552 │   def forward(*args, **kwargs):                                                          │
+│ ❱ 553 │   │   return model_forward(*args, **kwargs)                                              │
+│   554 │                                                                                          │
+│   555 │   # To act like a decorator so that it can be popped when doing `extract_model_from_pa   │
+│   556 │   forward.__wrapped__ = model_forward                                                    │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/accelerate/utils/operations.py:541 in │
+│ __call__                                                                                         │
+│                                                                                                  │
+│   538 │   │   update_wrapper(self, model_forward)                                                │
+│   539 │                                                                                          │
+│   540 │   def __call__(self, *args, **kwargs):                                                   │
+│ ❱ 541 │   │   return convert_to_fp32(self.model_forward(*args, **kwargs))                        │
+│   542 │                                                                                          │
+│   543 │   def __getstate__(self):                                                                │
+│   544 │   │   raise pickle.PicklingError(                                                        │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/amp/autocast_mode.py:14 in      │
+│ decorate_autocast                                                                                │
+│                                                                                                  │
+│    11 │   @functools.wraps(func)                                                                 │
+│    12 │   def decorate_autocast(*args, **kwargs):                                                │
+│    13 │   │   with autocast_instance:                                                            │
+│ ❱  14 │   │   │   return func(*args, **kwargs)                                                   │
+│    15 │   decorate_autocast.__script_unsupported = '@autocast() decorator is not supported in    │
+│    16 │   return decorate_autocast                                                               │
+│    17                                                                                            │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/nn/parallel/distributed.py:1026 │
+│ in forward                                                                                       │
+│                                                                                                  │
+│   1023 │   │   │   # call _rebuild_buckets before the peak memory usage increases                │
+│   1024 │   │   │   # during forward computation.                                                 │
+│   1025 │   │   │   # This should be called only once during whole training period.               │
+│ ❱ 1026 │   │   │   if torch.is_grad_enabled() and self.reducer._rebuild_buckets():               │
+│   1027 │   │   │   │   logger.info("Reducer buckets have been rebuilt in this iteration.")       │
+│   1028 │   │   │   │   self._has_rebuilt_buckets = True                                          │
+│   1029                                                                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in 
+producing loss. You can enable unused parameter detection by passing the keyword argument `find_unused_parameters=True` to `torch.nn.parallel.DistributedDataParallel`, and by 
+making sure all `forward` function outputs participate in calculating loss. 
+If you already have done the above, then the distributed data parallel module wasn't able to locate the output tensors in the return value of your module's `forward` function. 
+Please include the loss function and the structure of the return value of `forward` of your module when reporting this issue (e.g. list, dict, iterable).
+Parameter indices which did not receive grad for rank 0: 271 272 273 274 275 276
+ In addition, you can set the environment variable TORCH_DISTRIBUTED_DEBUG to either INFO or DETAIL to print out information about which particular parameters did not receive 
+gradient on this rank as part of this error
+[10:42:43] WARNING  Sending process 2889359 closing signal SIGTERM                                                                                                        api.py:700
+           ERROR    failed (exitcode: 1) local_rank: 1 (pid: 2889360) of binary: /home/tf/.conda/envs/cddtextif/bin/python                                                api.py:674
+╭─────────────────────────────── Traceback (most recent call last) ────────────────────────────────╮
+│ /home/tf/.conda/envs/cddtextif/bin/accelerate:8 in <module>                                      │
+│                                                                                                  │
+│   5 from accelerate.commands.accelerate_cli import main                                          │
+│   6 if __name__ == '__main__':                                                                   │
+│   7 │   sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])                         │
+│ ❱ 8 │   sys.exit(main())                                                                         │
+│   9                                                                                              │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/accelerate/commands/accelerate_cli.py │
+│ :45 in main                                                                                      │
+│                                                                                                  │
+│   42 │   │   exit(1)                                                                             │
+│   43 │                                                                                           │
+│   44 │   # Run                                                                                   │
+│ ❱ 45 │   args.func(args)                                                                         │
+│   46                                                                                             │
+│   47                                                                                             │
+│   48 if __name__ == "__main__":                                                                  │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/accelerate/commands/launch.py:932 in  │
+│ launch_command                                                                                   │
+│                                                                                                  │
+│   929 │   elif args.use_megatron_lm and not args.cpu:                                            │
+│   930 │   │   multi_gpu_launcher(args)                                                           │
+│   931 │   elif args.multi_gpu and not args.cpu:                                                  │
+│ ❱ 932 │   │   multi_gpu_launcher(args)                                                           │
+│   933 │   elif args.tpu and not args.cpu:                                                        │
+│   934 │   │   if args.tpu_use_cluster:                                                           │
+│   935 │   │   │   tpu_pod_launcher(args)                                                         │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/accelerate/commands/launch.py:627 in  │
+│ multi_gpu_launcher                                                                               │
+│                                                                                                  │
+│   624 │   )                                                                                      │
+│   625 │   with patch_environment(**current_env):                                                 │
+│   626 │   │   try:                                                                               │
+│ ❱ 627 │   │   │   distrib_run.run(args)                                                          │
+│   628 │   │   except Exception:                                                                  │
+│   629 │   │   │   if is_rich_available() and debug:                                              │
+│   630 │   │   │   │   console = get_console()                                                    │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/distributed/run.py:756 in run   │
+│                                                                                                  │
+│   753 │   elastic_launch(                                                                        │
+│   754 │   │   config=config,                                                                     │
+│   755 │   │   entrypoint=cmd,                                                                    │
+│ ❱ 756 │   )(*cmd_args)                                                                           │
+│   757                                                                                            │
+│   758                                                                                            │
+│   759 @record                                                                                    │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/distributed/launcher/api.py:132 │
+│ in __call__                                                                                      │
+│                                                                                                  │
+│   129 │   │   self._entrypoint = entrypoint                                                      │
+│   130 │                                                                                          │
+│   131 │   def __call__(self, *args):                                                             │
+│ ❱ 132 │   │   return launch_agent(self._config, self._entrypoint, list(args))                    │
+│   133                                                                                            │
+│   134                                                                                            │
+│   135 def _get_entrypoint_name(                                                                  │
+│                                                                                                  │
+│ /home/tf/.conda/envs/cddtextif/lib/python3.7/site-packages/torch/distributed/launcher/api.py:248 │
+│ in launch_agent                                                                                  │
+│                                                                                                  │
+│   245 │   │   │   # to the error file of the launcher process.                                   │
+│   246 │   │   │   raise ChildFailedError(                                                        │
+│   247 │   │   │   │   name=entrypoint_name,                                                      │
+│ ❱ 248 │   │   │   │   failures=result.failures,                                                  │
+│   249 │   │   │   )                                                                              │
+│   250 │   │                                                                                      │
+│   251 │   │   return result.return_values                                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+ChildFailedError: 
+============================================================
+train_stage1.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-02-08_10:42:43
+  host      : master-SYS-7049GP-TRTC-RI017
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 2889360)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================
