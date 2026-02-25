@@ -97,7 +97,7 @@ class SALDModel(nn.Module):
 
         # A. 提取结构锚定特征 [B, 256, H, W]
         sgb_feats = self.l_sgb(ir, vis) 
-        raw_cond = sgb_feats[-1] 
+        raw_cond = sgb_feats
         b, c, h, w = raw_cond.shape
         raw_cond = raw_cond.view(b, c, -1).permute(0, 2, 1) # [B, Seq, 256]
 

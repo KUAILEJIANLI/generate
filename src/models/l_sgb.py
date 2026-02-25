@@ -72,4 +72,4 @@ class LSGB(nn.Module):
             
             structure_feats.append(f_anchored)
             
-        return structure_feats
+        return structure_feats[-1]
