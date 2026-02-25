@@ -37,54 +37,55 @@ class SyntheticRestorationDataset(Dataset):
         else:
             print(f"✅ Found {len(self.image_paths)} training images.")
 
-        # 基础预处理: 调整大小并裁剪
+        # 3. 将 CenterCrop 改为 RandomCrop 
+        # 模拟“切片训练”，大幅增加模型在同一张图上见到的样本多样性
         self.base_transform = T.Compose([
-            T.Resize(size, interpolation=T.InterpolationMode.BILINEAR),
-            T.CenterCrop(size),
+            T.Resize(size + 64), # 略微放大，为随机裁剪留出空间
+            T.RandomCrop(size),
         ])
 
     def __len__(self):
         return len(self.image_paths)
 
-    def degrade(self, img_tensor):
-        """
-        核心函数: 制造'烂图'来模拟红外/可见光的退化
-        Input: Tensor [1, H, W], Range [0, 1]
-        """
-        # clone 一份，以免修改原图
-        deg_img = img_tensor.clone()
+def degrade(self, img_tensor):
+    """
+    极端化退化逻辑 (对标论文 4.1.1 节: 模拟信息截断场景)
+    目的: 彻底破坏局部像素分布，强迫模型依赖 L-SGB 的结构锚定。
+    """
+    deg_img = img_tensor.clone()
+    
+    # A. 极端高斯模糊 (模拟红外镜头严重失焦或运动浓雾)
+    if random.random() < 0.7: 
+        # 将模糊上限从 3.0 提升至 5.0，造成严重的高频纹理丢失
+        sigma = random.uniform(0.5, 5.0) 
+        k = int(2 * round(3 * sigma) + 1)
+        deg_img = TF.gaussian_blur(deg_img, [k, k], [sigma, sigma])
         
-        # A. 随机高斯模糊 (模拟红外模糊或失焦)
-        if random.random() < 0.7: # 70% 概率变模糊
-            sigma = random.uniform(0.1, 3.0)
-            # kernel size 必须是奇数
-            k = int(2 * round(3 * sigma) + 1)
-            # 限制 k 最小为 1
-            k = max(1, k) 
-            deg_img = TF.gaussian_blur(deg_img, [k, k], [sigma, sigma])
-            
-        # B. 随机高斯噪声 (模拟传感器热噪声)
-        if random.random() < 0.6:
-            noise_level = random.uniform(0.01, 0.15)
-            noise = torch.randn_like(deg_img) * noise_level
-            deg_img = deg_img + noise
-            
-        # C. 随机强度抖动 (模拟光照变化或红外热感差异)
-        if random.random() < 0.5:
-            brightness_factor = random.uniform(0.5, 1.2)
-            deg_img = deg_img * brightness_factor
-            
-        # D. 随机遮挡/丢失 (强迫模型通过上下文补全)
-        # 这对于训练生成模型的 Structure Branch 非常有效
-        if random.random() < 0.3:
-            h, w = deg_img.shape[-2:]
-            mask_size = random.randint(h // 10, h // 4)
-            x = random.randint(0, w - mask_size)
-            y = random.randint(0, h - mask_size)
-            deg_img[:, y:y+mask_size, x:x+mask_size] = 0.0
+    # B. 极端高斯噪声 (模拟传感器在极端暗光下的热噪声)
+    if random.random() < 0.6:
+        # 提高噪声强度上限 (0.15 -> 0.4)，彻底淹没像素级梯度
+        noise_level = random.uniform(0.05, 0.4) 
+        noise = torch.randn_like(deg_img) * noise_level
+        deg_img = deg_img + noise
+        
+    # C. 极端暗光/亮度抖动 (模拟极低照度下的致盲场景)
+    if random.random() < 0.5:
+        # 范围降至 0.05 (近乎全黑)，测试模型对微弱光子的捕获能力
+        brightness_factor = random.uniform(0.05, 0.8) 
+        deg_img = deg_img * brightness_factor
+        
+    # D. 极端随机遮挡 (对标 Mask-DiFuser 的掩码策略)
+    # 逻辑: 生成大型黑色遮挡块，强迫模型执行“语义补全”而非“像素平滑”
+    if random.random() < 0.4: # 概率从 0.3 提升至 0.4
+        h, w = deg_img.shape[-2:]
+        # 增加遮挡尺寸上限，模拟大面积信息丢失
+        mask_size = random.randint(h // 8, h // 3) 
+        x = random.randint(0, w - mask_size)
+        y = random.randint(0, h - mask_size)
+        deg_img[:, y:y+mask_size, x:x+mask_size] = 0.0
 
-        # 截断回 [0, 1] 范围
-        return torch.clamp(deg_img, 0.0, 1.0)
+    # 截断回 [0, 1] 范围
+    return torch.clamp(deg_img, 0.0, 1.0)
 
     def __getitem__(self, idx):
         path = self.image_paths[idx]

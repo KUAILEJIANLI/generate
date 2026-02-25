@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import set_seed
 
 # 引入 8-bit
@@ -37,11 +37,17 @@ def train():
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
     # ===============================================
-
+    # 针对 L-SGB 中未参与 loss 计算的多尺度特征层 
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
         mixed_precision="fp16",
-        gradient_accumulation_steps=CONFIG['grad_accum_steps']
+        gradient_accumulation_steps=CONFIG['grad_accum_steps'],
+        kwargs_handlers=[ddp_kwargs] # 注入配置
     )
+    CONFIG.update({
+        "batch_size": 4,    # 从 1 提升到 4，24G 显存（4090）完全吃得消 
+        "lr": 5e-5,         # 对标 Mask-DiFuser，使用更稳健的扩散模型学习率 
+    })
     set_seed(CONFIG['seed'])
 
     if accelerator.is_main_process:

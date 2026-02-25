@@ -5,7 +5,7 @@ from diffusers import AutoencoderKL, UNet2DConditionModel, DDPMScheduler
 from peft import LoraConfig, get_peft_model
 from src.models.l_sgb import LSGB
 import peft.tuners.lora as lora_module
-
+from src.models.tc_attention import TCRefinementAttention
 # === 全局补丁保持不变 ===
 def apply_global_lora_patch():
     TargetLayer = None
@@ -47,6 +47,15 @@ class SALDModel(nn.Module):
             torch_dtype=dtype # <--- 关键
         )
         self.unet.requires_grad_(False)
+        
+        # 4. 集成 TC-Refinement 模块 
+        # query_dim 为 SD v1.5 的隐藏层维度 (768)
+        # context_dim 为 L-SGB 输出的特征维度 (256)
+        self.tc_refinement = TCRefinementAttention(
+            query_dim=768, 
+            context_dim=256, 
+            heads=8
+        )
         
         print("Injecting LoRA adapters...")
         lora_config = LoraConfig(
@@ -98,14 +107,24 @@ class SALDModel(nn.Module):
         
         noisy_latents = self.scheduler.add_noise(latents, noise, timesteps)
         
-        # 3. L-SGB (FP32 -> FP16 自动转换)
+        # 获取结构特征 
         sgb_feats = self.l_sgb(ir, vis) 
-        raw_cond = sgb_feats[-1]
+        raw_cond = sgb_feats[-1] # [B, 256, H, W]
         b, c, h, w = raw_cond.shape
-        raw_cond = raw_cond.view(b, c, -1).permute(0, 2, 1) 
+        raw_cond = raw_cond.view(b, c, -1).permute(0, 2, 1) # [B, Seq, 256]
+
+        # 5. 使用 TCRefinement 动态精炼特征 
+        # 这里需要模拟时间嵌入，或者直接注入 U-Net 能够理解的空间引导
+        # 为了简化训练且保持 Control 逻辑，我们先用它处理 conditioning
+        dummy_time_emb = torch.randn(b, 1280, device=ir.device) # 临时模拟，实际应从 UNet 获取
+        refined_cond = self.tc_refinement(
+            x=torch.zeros(b, h*w, 768, device=ir.device), # 预训练占位
+            context=raw_cond,
+            time_emb=dummy_time_emb
+        )
         
         # 4. Adapter
-        encoder_hidden_states = self.adapter(raw_cond)
+        encoder_hidden_states = self.adapter(refined_cond)
         
         # Time-Aware Injection
         t_norm = timesteps.float() / self.scheduler.config.num_train_timesteps
