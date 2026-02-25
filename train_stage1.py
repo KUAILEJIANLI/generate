@@ -24,11 +24,11 @@ from src.data.sald_dataset import SyntheticRestorationDataset
 CONFIG = {
     "data_path": "/home/tf/dataset/mini_imageNet", 
     "save_path": "checkpoints/stage1_sald",
-    "batch_size": 1,       
+    "batch_size": 4,       
     "img_size": 256,       
     "grad_accum_steps": 4, 
     "epochs": 10,
-    "lr": 1e-4,
+    "lr": 5e-5,
     "seed": 42
 }
 
@@ -44,10 +44,6 @@ def train():
         gradient_accumulation_steps=CONFIG['grad_accum_steps'],
         kwargs_handlers=[ddp_kwargs] # 注入配置
     )
-    CONFIG.update({
-        "batch_size": 4,    # 从 1 提升到 4，24G 显存（4090）完全吃得消 
-        "lr": 5e-5,         # 对标 Mask-DiFuser，使用更稳健的扩散模型学习率 
-    })
     set_seed(CONFIG['seed'])
 
     if accelerator.is_main_process:

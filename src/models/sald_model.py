@@ -48,40 +48,35 @@ class SALDModel(nn.Module):
         )
         self.unet.requires_grad_(False)
         
-        # 4. 集成 TC-Refinement 模块 
-        # query_dim 为 SD v1.5 的隐藏层维度 (768)
-        # context_dim 为 L-SGB 输出的特征维度 (256)
-        self.tc_refinement = TCRefinementAttention(
-            query_dim=768, 
-            context_dim=256, 
-            heads=8
-        )
         
-        print("Injecting LoRA adapters...")
-        lora_config = LoraConfig(
-            r=8, 
-            lora_alpha=32,
-            target_modules=["to_k", "to_q", "to_v", "to_out.0"],
-            lora_dropout=0.05,
-            bias="none"
-        )
-        self.unet = get_peft_model(self.unet, lora_config)
-        
-        # 调度器不涉及大显存，保持默认
-        self.scheduler = DDPMScheduler.from_pretrained(model_id, subfolder="scheduler")
-        
-        # 自定义组件 L-SGB 和 Adapter 参数量小，建议用 FP32 保持精度
-        # 混合精度训练时，autocast 会自动处理它们的计算精度
+        # 关键修正：重新设计特征流维度
         self.cross_attention_dim = 768
         self.lsgb_dim = 256
+        self.time_emb_dim = 1280
+
         self.l_sgb = LSGB(in_channels=1, features=[32, 64, 128, self.lsgb_dim])
         
+        # 1. 先用 Adapter 把 256 映射到 768
         self.adapter = nn.Sequential(
             nn.Linear(self.lsgb_dim, self.cross_attention_dim),
             nn.SiLU(),
             nn.Linear(self.cross_attention_dim, self.cross_attention_dim)
         )
 
+        # 2. 再用 TC-Refinement 处理 768 维特征
+        self.tc_refinement = TCRefinementAttention(
+            query_dim=768, 
+            context_dim=768, # 修正为与 adapter 输出一致
+            heads=8
+        )
+        
+        # 3. 时间步转换模块 (简单版，用于生成 tc_refinement 所需的 time_emb)
+        self.time_proj = nn.Sequential(
+            nn.Linear(1, 256),
+            nn.SiLU(),
+            nn.Linear(256, self.time_emb_dim)
+        )
+        
     def encode_latents(self, img):
         if img.shape[1] == 1: img = img.repeat(1, 3, 1, 1)
         
@@ -94,54 +89,39 @@ class SALDModel(nn.Module):
         return latents
 
     def forward(self, ir, vis, gt):
-        # 1. Latents
         latents = self.encode_latents(gt)
-        
-        # 2. Noise & Timesteps
         noise = torch.randn_like(latents)
         bsz = latents.shape[0]
-        timesteps = torch.randint(
-            0, self.scheduler.config.num_train_timesteps, 
-            (bsz,), device=latents.device
-        ).long()
-        
+        timesteps = torch.randint(0, 1000, (bsz,), device=latents.device).long()
         noisy_latents = self.scheduler.add_noise(latents, noise, timesteps)
-        
-        # 获取结构特征 
+
+        # A. 提取结构锚定特征 [B, 256, H, W]
         sgb_feats = self.l_sgb(ir, vis) 
-        raw_cond = sgb_feats[-1] # [B, 256, H, W]
+        raw_cond = sgb_feats[-1] 
         b, c, h, w = raw_cond.shape
         raw_cond = raw_cond.view(b, c, -1).permute(0, 2, 1) # [B, Seq, 256]
 
-        # 5. 使用 TCRefinement 动态精炼特征 
-        # 这里需要模拟时间嵌入，或者直接注入 U-Net 能够理解的空间引导
-        # 为了简化训练且保持 Control 逻辑，我们先用它处理 conditioning
-        dummy_time_emb = torch.randn(b, 1280, device=ir.device) # 临时模拟，实际应从 UNet 获取
+        # B. 维度映射 256 -> 768
+        aligned_cond = self.adapter(raw_cond)
+
+        # C. 时间感知调制
+        # 将 timesteps 归一化并转为 embedding
+        t_val = timesteps.float().view(bsz, 1) / 1000.0
+        t_emb = self.time_proj(t_val)
+        
+        # 精炼特征 [B, Seq, 768]
+        # x 使用 aligned_cond 作为基础查询，实现自精炼
         refined_cond = self.tc_refinement(
-            x=torch.zeros(b, h*w, 768, device=ir.device), # 预训练占位
-            context=raw_cond,
-            time_emb=dummy_time_emb
+            x=aligned_cond, 
+            context=aligned_cond,
+            time_emb=t_emb
         )
-        
-        # 4. Adapter
-        encoder_hidden_states = self.adapter(refined_cond)
-        
-        # Time-Aware Injection
-        t_norm = timesteps.float() / self.scheduler.config.num_train_timesteps
-        t_norm = t_norm.view(bsz, 1, 1).to(encoder_hidden_states.dtype)
-        encoder_hidden_states = encoder_hidden_states * (0.5 + t_norm)
-        
-        # 5. U-Net Predict
-        # U-Net 是 FP16 的，确保输入也是 FP16 (autocast 会处理，但手动 cast 更稳)
-        noisy_latents = noisy_latents.to(self.unet.dtype)
-        encoder_hidden_states = encoder_hidden_states.to(self.unet.dtype)
-        
+
+        # D. U-Net 预测
         noise_pred = self.unet(
-            noisy_latents, 
+            noisy_latents.to(self.unet.dtype), 
             timesteps, 
-            encoder_hidden_states=encoder_hidden_states
+            encoder_hidden_states=refined_cond.to(self.unet.dtype)
         ).sample
         
-        # Loss 计算 (转回 float32 算 Loss 防止溢出)
-        loss = F.mse_loss(noise_pred.float(), noise.float())
-        return loss
+        return F.mse_loss(noise_pred.float(), noise.float())
