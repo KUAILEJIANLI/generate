@@ -46,8 +46,8 @@ class TCRefinementAttention(nn.Module):
         # [B, Seq, Heads*Dim] -> [B, Heads, Seq, Dim]
         b, seq, _ = q.shape
         q = q.view(b, seq, h, -1).permute(0, 2, 1, 3)
-        k = k.view(b, -1, h, -1).permute(0, 2, 1, 3)
-        v = v.view(b, -1, h, -1).permute(0, 2, 1, 3)
+        k = k.view(b, seq, h, -1).permute(0, 2, 1, 3)
+        v = v.view(b, seq, h, -1).permute(0, 2, 1, 3)
 
         # 2. 计算 Attention Score
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale

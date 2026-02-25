@@ -105,7 +105,7 @@ def save_preview(model, dataloader, epoch, step, save_path, accelerator):
     )
 
     # 4. 调用 U-Net 预测噪声 (使用混合精度以匹配训练环境)
-    with torch.cuda.amp.autocast(enabled=(accelerator.mixed_precision != "no")):
+    with torch.amp.autocast('cuda', enabled=(accelerator.mixed_precision != "no")):
         noise_pred = unwrapped_model.unet(
             noisy_latents.to(unwrapped_model.unet.dtype), 
             timesteps, 
@@ -115,11 +115,17 @@ def save_preview(model, dataloader, epoch, step, save_path, accelerator):
     # 5. 根据扩散去噪公式反推原始样本 x0 (Original Sample)
     # 公式: x0 = (x_t - sqrt(1 - alpha_bar_t) * epsilon) / sqrt(alpha_bar_t)
     alpha_prod_t = unwrapped_model.scheduler.alphas_cumprod[timesteps].view(-1, 1, 1, 1).to(latents.device)
+    
     pred_latents = (noisy_latents - (1 - alpha_prod_t) ** 0.5 * noise_pred) / (alpha_prod_t ** 0.5)
+    
+    # 1. 修复精度不匹配错误
+    # 确保 pred_latents 转换为 VAE 的精度 (通常是 float16)
+    pred_latents_input = (pred_latents / 0.18215).to(unwrapped_model.vae.dtype)
 
-    # 6. VAE 解码预测出的 Latent 到像素空间
-    # 0.18215 是 Stable Diffusion 的标准缩放系数
-    pred_imgs = unwrapped_model.vae.decode(pred_latents / 0.18215).sample # 输出范围约为 [-1, 1]
+    # 2. VAE 解码预测出的 Latent 到像素空间
+    pred_imgs = unwrapped_model.vae.decode(pred_latents_input).sample # 输出范围约为 [-1, 1]
+    
+    
 
     # 7. 拼接对比图并保存
     # 将图像统一转换回 [0, 1] 范围以便展示
@@ -160,9 +166,11 @@ def train():
         kwargs_handlers=[ddp_kwargs] # 注入配置
     )
     set_seed(CONFIG['seed'])
+    preview_save_path = os.path.join(CONFIG['save_path'], "previews")
 
     if accelerator.is_main_process:
         os.makedirs(CONFIG['save_path'], exist_ok=True)
+        os.makedirs(preview_save_path, exist_ok=True)
         print(f"🚀 Launching Distributed Training on {accelerator.num_processes} GPUs!")
 
     # 数据
@@ -213,7 +221,6 @@ def train():
     else:
         model.vae.eval()
 
-    preview_save_path = os.path.join(CONFIG['save_path'], "previews")
 
     # 遍历每个epoch
     for epoch in range(CONFIG['epochs']):

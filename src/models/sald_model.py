@@ -31,7 +31,8 @@ class SALDModel(nn.Module):
         # 这能直接节省 50% 的模型权重显存 (约 2GB)
         dtype = torch.float16 
         model_id = "runwayml/stable-diffusion-v1-5"
-
+        # [新增/补回] 调度器初始化，它是 Diffusion 加噪的核心组件
+        self.scheduler = DDPMScheduler.from_pretrained(model_id, subfolder="scheduler")
         print(f"Loading VAE (FP16)...")
         self.vae = AutoencoderKL.from_pretrained(
             model_id, 
