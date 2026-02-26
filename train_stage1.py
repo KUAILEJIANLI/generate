@@ -19,18 +19,21 @@ try:
 except ImportError:
     HAS_BNB = False
 
+import kagglehub
+path = kagglehub.dataset_download("ifigotin/imagenetmini-1000")
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.models.sald_model import SALDModel
 from src.data.sald_dataset import SyntheticRestorationDataset
 
 CONFIG = {
-    "data_path": "/home/tf/dataset/mini_imageNet", 
+    "data_path": path, 
     "save_path": "checkpoints/stage1_sald",
-    "batch_size": 4,       
+    "batch_size": 32,       
     "img_size": 256,       
-    "grad_accum_steps": 4, 
-    "epochs": 10,
-    "lr": 5e-5,
+    "grad_accum_steps": 1, 
+    "epochs": 100,
+    "lr": 1e-4,
     "seed": 42
 }
 
@@ -166,6 +169,7 @@ def train():
         kwargs_handlers=[ddp_kwargs] # 注入配置
     )
     set_seed(CONFIG['seed'])
+
     preview_save_path = os.path.join(CONFIG['save_path'], "previews")
 
     if accelerator.is_main_process:
@@ -179,7 +183,7 @@ def train():
         dataset, 
         batch_size=CONFIG['batch_size'], 
         shuffle=True, 
-        num_workers=4, 
+        num_workers=14, 
         pin_memory=True,
         drop_last=True
     )
